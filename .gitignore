@@ -4,6 +4,8 @@
 
 build/
 
+benchmarks
+
 # Compiled Object files
 *.slo
 *.lo
