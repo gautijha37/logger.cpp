@@ -5,6 +5,8 @@
 build/
 
 benchmarks
+out
+rough.cpp
 
 # Compiled Object files
 *.slo

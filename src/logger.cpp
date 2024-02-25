@@ -6,7 +6,7 @@ namespace TIME
 {
 void get_time(char* buf)
 {
-	auto currentTime = std::chrono::high_resolution_clock::now();
+	auto currentTime = std::chrono::system_clock::now();
 	auto nanoSeconds = std::chrono::time_point_cast<std::chrono::nanoseconds>(currentTime);
 
 	auto nanoSecondsCount = nanoSeconds.time_since_epoch().count();
@@ -26,46 +26,40 @@ void get_time(char* buf)
 } // namespace TIME
 
 my_logger::my_logger()
-	: m_head(0)
-	, m_tail(0)
-	, m_lost_msg_count(0)
-	, m_continue_logging(true)
+	: m_continue_logging(true)
 {
-	m_to_print.assign(BUFFER_SIZE, {});
 	m_printing_thread = std::thread(&my_logger::logging_thread, this);
 }
 
 void my_logger::logging_thread()
 {
-	// auto curr_time = std::chrono::steady_clock::now();
-	// auto next_start_time = curr_time + LOGGING_DELAY;
 	while(m_continue_logging)
 	{
 		std::unique_lock lg(mu_buffer);
-		m_cond_var.wait(lg, [this] { return m_head != m_tail; });
-		while(m_head != m_tail)
+		m_consumer_cond_var.wait(lg, [this] { return !m_to_print.empty() || !m_continue_logging; });
+		while(!m_to_print.empty() && m_continue_logging)
 		{
-			std::printf("%s\n", m_to_print[m_head].data());
-			m_head = (m_head + 1) % BUFFER_SIZE;
+			std::printf("%s\n", m_to_print.front().get());
+			m_to_print.pop();
 		}
 
-		lg.unlock();
-		m_cond_var.notify_one();
+		// lg.unlock();
+		// m_consumer_cond_var.notify_one();
+		// m_producer_cond_var.notify_all(); //notify all producers
 	}
-
-	// std::this_thread::sleep_until(next_start_time);
 }
 
 my_logger::~my_logger()
 {
+	std::unique_lock ul(mu_buffer);
 	m_continue_logging = false;
-	if(m_printing_thread.joinable())
-		m_printing_thread.join();
-	// std::cerr << "Lost " << m_lost_msg_count << " messages\n";
+	ul.unlock();
+	m_consumer_cond_var.notify_all();
+
+	m_printing_thread.join();
+	while(!m_to_print.empty())
+	{
+		std::printf("%s\n", m_to_print.front().get());
+		m_to_print.pop();
+	}
 }
-// template <typename string_type>
-// void my_logger::warn(string_type input)
-// {
-// 	// std::lock_guard<std::mutex> lg(mu_lines);
-// 	// m_lines.push_back(std::make_pair(std::forward<string_type>(input), my_logger::log_type::WARN));
-// }
